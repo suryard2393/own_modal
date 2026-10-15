@@ -1,0 +1,70 @@
+TOKENIZER / CHECKPOINT STATUS
+==============================
+Last verified: inspected via _inspect2.py
+
+checkpoints/my_minigpt_v2.pth
+  vocab_size  : 129
+  block_size  : 101
+  n_embd      : 128
+  n_head      : 4
+  n_layer     : 4
+  architecture: MiniGPTv2  (keys: blocks.N.attn.heads.N.mask)
+  status      : BACKUP ONLY — do not use for text-generation evaluation
+
+tokenizers/my_bpe_tokenizer.json
+  vocab_size  : 117
+  special IDs : [PAD]=0  [UNK]=1  [BOS]=2  [EOS]=3
+  status      : BACKUP ONLY — does NOT match my_minigpt_v2.pth
+
+checkpoints/my_minigpt_fineweb.pth
+  vocab_size  : 117  (char-level, stored in "chars" key)
+  block_size  : 128
+  n_embd      : 64
+  n_head      : 2
+  n_layer     : 2
+  architecture: MiniGPT v1  (keys: blocks.N.sa.heads.N.tril)
+  status      : BACKUP ONLY — v1 architecture, incompatible with current model.py
+
+checkpoints/my_minigpt.pth
+  vocab_size  : 35  (char-level, QA pairs only)
+  block_size  : 128
+  n_embd      : 64
+  n_head      : 2
+  n_layer     : 2
+  architecture: MiniGPT v1
+  status      : BACKUP ONLY — v1 architecture, incompatible with current model.py
+
+KNOWN ISSUE
+-----------
+The tokenizer that was used to train my_minigpt_v2.pth (vocab=129) no longer
+exists on disk. It was saved inside the Colab runtime and was not downloaded
+before the session ended. The 12 missing token IDs (117-128) exist in the
+model weights but cannot be produced by the current tokenizer.
+
+Padding the tokenizer with 12 arbitrary tokens would match the vocab size
+number but would NOT restore the original token-to-ID mapping. That approach
+is rejected.
+
+RECOVERY PLAN
+-------------
+1. Run python src/train.py (when ready).
+   This will:
+   - Stream a fresh FineWeb-Edu corpus sample.
+   - Train a new BPE tokenizer from that corpus.
+   - Train a new MiniGPTv2 from scratch using that tokenizer.
+   - Save both as a matched pair:
+       checkpoints/my_minigpt_fineweb.pth  (new, will prompt before overwrite)
+       tokenizers/my_bpe_tokenizer.json    (new, will prompt before overwrite)
+
+2. The new pair will be the active model/tokenizer for chat.py.
+
+3. The current backup files are preserved until step 1 completes successfully.
+
+WHAT chat.py DOES TODAY
+-----------------------
+- Loads my_minigpt_v2.pth (vocab=129).
+- Loads my_bpe_tokenizer.json (vocab=117).
+- Detects the mismatch via validate_compatibility() and prints a clear warning.
+- Does NOT crash — the model runs but output quality is degraded because
+  token IDs 117-128 can never be produced by the tokenizer.
+- The warning is printed every time chat.py starts so the issue is visible.
